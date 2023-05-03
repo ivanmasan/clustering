@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import graphviz
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,18 +10,10 @@ from typing import Union, Optional, Literal, List
 import numpy as np
 import pandas as pd
 from scipy import stats
-from collections import Counter
+from collections import Counter, defaultdict
 from itertools import combinations
-from scipy.stats import betabinom
 
-from eval import get_evaluator
-
-
-data = np.load("tree_data.npz", allow_pickle=True)
-s = data.get('s')
-n = data.get('n')
-numerical = data.get('numerical')
-categorical = data.get('categorical')
+from evaluator.eval import get_evaluator
 
 
 @dataclass
@@ -96,7 +90,9 @@ class Tree:
         self,
         minimal_improvement: float,
         max_leaves: int,
+        max_depth: int,
         min_cluster_size: int,
+        min_cluster_sample_size: int,
         numerical_proposition_count: int,
         max_items_per_node: int,
         refine_candidates: int,
@@ -107,9 +103,11 @@ class Tree:
         self._nodes_dict = {}
         self._node_count = 0
         self._max_leaves = max_leaves
+        self._max_depth = max_depth
         self._max_items_per_node = max_items_per_node
         self._min_split_improvement = minimal_improvement
         self._min_cluster_size = min_cluster_size
+        self._min_cluster_sample_size = min_cluster_sample_size
         self._refine_candidates = refine_candidates
         self._numerical_proposition_count = numerical_proposition_count
         self._numerical_feature_names = numerical_feature_names
@@ -122,11 +120,11 @@ class Tree:
         self._node_count += 1
         return node
 
-    def fit(self, numerical, categorical, n, s):
+    def fit(self, numerical, categorical, n, s, sample_size):
         self._assign_feature_names(numerical, categorical)
         self._data_points = n.shape[0]
         self._root = self._new_node(_batch_log_lkhd(n, s))
-        self._assign_children(self._root, numerical, categorical, n, s)
+        self._assign_children(self._root, numerical, categorical, n, s, sample_size)
         self._prune()
         return self._labels()
 
@@ -140,15 +138,18 @@ class Tree:
         assert len(self._numerical_feature_names) == numerical.shape[1]
         assert len(self._categorical_feature_names) == categorical.shape[1]
 
-    def _assign_children(self, node, numerical, categorical, n, s):
-        node.sample_size = n.sum((0, 2))
-        node.p = s.sum((0, 2)) / node.sample_size
+    def _assign_children(self, node, numerical, categorical, n, s, sample_size):
+        node.sample_size = n.sum((0, 1))
+        node.p = s.sum((0, 1)) / node.sample_size
         node.item_size = len(n)
 
         if numerical.shape[0] <= self._min_cluster_size * 2:
             return
 
-        split, (left_lkhd, right_lkhd) = self._find_best_split(numerical, categorical, n, s)
+        if np.any(node.sample_size < self._min_cluster_sample_size * 2):
+            return
+
+        split, (left_lkhd, right_lkhd) = self._find_best_split(numerical, categorical, n, s, sample_size)
         if split is None:
             return
 
@@ -168,14 +169,16 @@ class Tree:
         node.split_improvement = split_improvement
 
         self._assign_children(node.left_child, numerical[split.mask],
-                              categorical[split.mask], n[split.mask], s[split.mask])
+                              categorical[split.mask], n[split.mask],
+                              s[split.mask], sample_size[split.mask])
         self._assign_children(node.right_child, numerical[~split.mask],
-                              categorical[~split.mask], n[~split.mask], s[~split.mask])
+                              categorical[~split.mask], n[~split.mask],
+                              s[~split.mask], sample_size[~split.mask])
 
     def _yield_numerical_split_propositions(self, x):
         sort_idx = np.argsort(x)
 
-        if len(x) < self._min_cluster_size * 2:
+        if len(x) <= self._min_cluster_size * 2:
             return np.array([])
 
         split_idx_values = np.linspace(
@@ -203,16 +206,17 @@ class Tree:
 
                 subset_items = sum([group_counter[s] for s in subset])
                 if self._min_cluster_size <= subset_items <= total_items - self._min_cluster_size:
-                    yield (
-                        subset,
-                        sum([masks[:, s] for s in subset]).astype(bool)
-                    )
+                    mask = sum([masks[:, s] for s in subset]).astype(bool)
+                    yield subset, mask
 
-    def _yield_all_splits(self, numerical, categorical):
+    def _yield_all_splits(self, numerical, categorical, sample_size):
         for i in range(numerical.shape[1]):
             generator = self._yield_numerical_split_propositions(numerical[:, i])
 
             for split_value, mask in generator:
+                if not self._split_has_big_enough_sample_size(mask, sample_size):
+                    continue
+
                 yield Split(
                     variable_type='numerical',
                     variable_idx=i,
@@ -224,6 +228,9 @@ class Tree:
             generator = self._yield_categorical_split_propositions(categorical[:, i])
 
             for set_value, mask in generator:
+                if not self._split_has_big_enough_sample_size(mask, sample_size):
+                    continue
+
                 yield Split(
                     variable_type='categorical',
                     variable_idx=i,
@@ -231,7 +238,11 @@ class Tree:
                     mask=mask
                 )
 
-    def _refine_split(self, split, numerical):
+    def _split_has_big_enough_sample_size(self, mask, sample_size):
+        min_sample_size = min(sample_size[mask].sum(), sample_size[~mask].sum())
+        return min_sample_size > self._min_cluster_sample_size
+
+    def _refine_split(self, split, numerical, sample_size):
         x = numerical[:, split.variable_idx]
         sort_idx = np.argsort(x)
 
@@ -261,6 +272,10 @@ class Tree:
         for split_idx in split_idx_values:
             mask = np.full(shape=x.shape, fill_value=False)
             mask[sort_idx[:split_idx]] = True
+
+            if not self._split_has_big_enough_sample_size(mask, sample_size):
+                continue
+
             yield Split(
                 variable_type='numerical',
                 variable_idx=split.variable_idx,
@@ -268,12 +283,12 @@ class Tree:
                 mask=mask
             )
 
-    def _find_best_split(self, numerical, categorical, n, s):
+    def _find_best_split(self, numerical, categorical, n, s, sample_size):
         splits = []
         lkhd = []
         lkhd_tuple = []
 
-        for split in self._yield_all_splits(numerical, categorical):
+        for split in self._yield_all_splits(numerical, categorical, sample_size):
             log_lkhd = (
                 _batch_log_lkhd(n[split.mask], s[split.mask]),
                 _batch_log_lkhd(n[~split.mask], s[~split.mask])
@@ -289,7 +304,7 @@ class Tree:
                 if splits[idx].variable_type != 'numerical':
                     continue
 
-                for split in self._refine_split(splits[idx], numerical):
+                for split in self._refine_split(splits[idx], numerical, sample_size):
                     log_lkhd = (
                         _batch_log_lkhd(n[split.mask], s[split.mask]),
                         _batch_log_lkhd(n[~split.mask], s[~split.mask])
@@ -299,6 +314,9 @@ class Tree:
                     splits.append(split)
                     lkhd.append(sum_log_lkhd)
                     lkhd_tuple.append(log_lkhd)
+
+        if len(lkhd) == 0:
+            return None, (None, None)
 
         idx = np.argmax(lkhd)
         return splits[idx], lkhd_tuple[idx]
@@ -393,7 +411,7 @@ class Tree:
                     f'Improvement: {np.round(node.split_improvement, 2)}\n'
                     f'Feature: {feature_name}\n'
                     f'Split value: {node.split.split_value}\n'
-                    f'P: {np.round(node.p, 3)}\n'
+                    f'P: {["{:.0%}".format(p) for p in node.p]}\n'
                     f'N: {node.sample_size}\n'
                     f'Size: {node.item_size}'
                 )
@@ -416,89 +434,62 @@ class Tree:
         tree_viz.render(directory=output_folder, view=view)
 
 
+target_data = np.load("query_data/data.npz", allow_pickle=True)
+feature_data = np.load("query_data/X.npz", allow_pickle=True)
+embeddings = np.load("text_clusters/cluster_7.npz", allow_pickle=True)
+
+targets = target_data['data']
+targets = targets[:, :, 2:] + targets[:, :, 1:-1] + targets[:, :, :-2]
+sample_size = targets.sum(1)[:, -1, -1, 1]
+targets = targets.reshape((targets.shape[0], targets.shape[1] * targets.shape[2], *targets.shape[3:]))
+targets = targets[:, :, [0, 2, 3, 4, 5, 6]]
+
 tree = Tree(
-    minimal_improvement=15,
-    max_leaves=50,
+    minimal_improvement=45,
+    max_leaves=20,
+    max_depth=10,
     min_cluster_size=16,
-    numerical_proposition_count=100,
-    refine_candidates=50,
-    max_items_per_node=5000,
+    min_cluster_sample_size=500,
+    numerical_proposition_count=80,
+    refine_candidates=10,
+    max_items_per_node=2000,
     categorical_feature_names=['text'],
-    numerical_feature_names=['X_dim', 'Y_dim', 'Z_dim', 'area',
-                             'min_dim', 'max_dim', 'dim_ratio', 'weight']
+    numerical_feature_names=feature_data['feature_names']
 )
-labels = tree.fit(numerical, categorical, n, s)
+
+labels = tree.fit(feature_data['data'], embeddings['labels'].reshape(-1, 1),
+                  targets[:, :, :, 1], targets[:, :, :, 0],
+                  sample_size)
 
 
-clusters = np.unique(labels)
-cluster_masks = []
-cluster_lkhd = []
 
-for cluster in clusters:
-    cluster_masks.append(labels == cluster)
-    cluster_lkhd.append(tree._nodes_dict[cluster].lkhd)
-
-cluster_count = len(cluster_masks)
-
-while cluster_count > 16:
-    degradation_matrix = np.full(shape=(cluster_count, cluster_count), fill_value=-np.inf)
-    for i in range(cluster_count):
-        for j in range(cluster_count):
-            if i >= j:
-                continue
-
-            mask = (cluster_masks[i] | cluster_masks[j])
-            joint_lkhd = _batch_log_lkhd(n[mask], s[mask])
-            lkhd_degradation = joint_lkhd - cluster_lkhd[i] - cluster_lkhd[j]
-
-            degradation_matrix[i, j] = lkhd_degradation
-
-    i, j = divmod(np.argmax(degradation_matrix), cluster_count)
-
-    cluster_masks.append((cluster_masks[i] | cluster_masks[j]))
-    cluster_lkhd.append(degradation_matrix[i, j] + cluster_lkhd[i] + cluster_lkhd[j])
-
-    del cluster_masks[j]
-    del cluster_masks[i]
-    del cluster_lkhd[j]
-    del cluster_lkhd[i]
-
-    cluster_count -= 1
-
-
-grouped_labels = np.empty_like(labels)
-for i, mask in enumerate(cluster_masks):
-    grouped_labels[mask] = i
-
-
-m = defaultdict(set)
-for l, g in zip(labels, grouped_labels):
-    m[g].add(l)
-
-
+for l in np.unique(labels):
+    mask = l == labels
+    print(l)
+    print(sample_size[mask].sum())
 
 evaluator = get_evaluator()
 
-
-raise
-
-
-skus = pd.read_csv('skus.csv')
-
+skus = pd.read_csv('query_data/skus.csv')
 
 lkhd = evaluator.evaluate(
     skus=skus.wms_sku_id.values,
-    cluster_idx=grouped_labels,
+    cluster_idx=labels
 )
+
 tree.visualize_tree(view=True)
 
+output_path = Path('results/lkhd_tree_new_2')
 evaluator.overview(
-    output_path=Path('results/lkhd_tree_pregrouped'),
+    output_path=output_path,
     skus=skus.wms_sku_id.values,
     cluster_idx=labels,
-    image_path=Path('small_images'),
-    features=np.hstack([numerical, categorical]),
-    feature_names=['X_dim', 'Y_dim', 'Z_dim', 'area',
-                   'min_dim', 'max_dim', 'dim_ratio', 'weight', 'text']
+    image_path=Path('images'),
+    features=np.hstack([feature_data['data'], embeddings['labels'].reshape(-1, 1)]),
+    feature_names=np.append(feature_data['feature_names'], 'text')
 )
-tree.visualize_tree(Path('results/lkhd_tree_2'), view=True)
+tree.visualize_tree(output_path, view=True)
+
+np.savez(output_path / 'clusters.npz', labels=labels, skus=skus.wms_sku_id.values)
+
+

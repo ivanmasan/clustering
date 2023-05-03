@@ -1,22 +1,9 @@
-from copy import deepcopy
-from pathlib import Path
-from scipy.stats import binom
 from collections import Counter
 import numpy as np
 import pandas as pd
-from sklearn import tree
-from matplotlib import pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.manifold import TSNE
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from scipy.stats import beta, binom
-from sklearn.tree import DecisionTreeRegressor
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
-from scipy.stats import boxcox
-from db import get_query_fetcher
-from eval import get_evaluator
-from sklearn.feature_extraction.text import CountVectorizer
-from stop_words import get_stop_words
+from evaluator.eval import get_evaluator
 
 import torch
 
@@ -171,7 +158,7 @@ for batch in yield_repeat_batches(SAMPLES, episodes=5000):
 raise
 evaluator.overview(
     output_path=Path('results/custom_cluster'),
-    image_path=Path('small_images'),
+    image_path=Path('images'),
     skus=skus.wms_sku_id.values,
     cluster_idx=clusters,
     features=uscaled_X,

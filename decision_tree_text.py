@@ -3,17 +3,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn import tree
-from matplotlib import pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.manifold import TSNE
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder
 from scipy.stats import beta
 from sklearn.tree import DecisionTreeRegressor
 
-from db import get_query_fetcher
-from eval import get_evaluator, create_cluster_images
-from sklearn.feature_extraction.text import CountVectorizer
-from stop_words import get_stop_words
+from evaluator.eval import get_evaluator, create_cluster_images
 
 evaluator = get_evaluator()
 

@@ -5,9 +5,8 @@ import pandas as pd
 fasttext.util.download_model('cs', if_exists='ignore')
 ft = fasttext.load_model('cc.cs.300.bin')
 
-skus = pd.read_csv('skus.csv')
+skus = pd.read_csv('query_data/skus.csv')
 names = skus.name.apply(lambda x: x.lower()).values
-
 
 embedded_names = []
 for name in names:
@@ -16,4 +15,4 @@ for name in names:
 
 embedded_names = np.stack(embedded_names)
 
-np.savez('embedded_names.npz', embedded_names)
+np.savez('text_clusters/embedded_names.npz', embedded_names)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Union, Optional, Literal
 
 import numpy as np
@@ -9,9 +8,8 @@ import pandas as pd
 from scipy import stats
 from collections import Counter
 from itertools import combinations
-from scipy.stats import betabinom
 
-from eval import get_evaluator
+from evaluator.eval import get_evaluator
 
 
 data = np.load("tree_data.npz", allow_pickle=True)
@@ -282,7 +280,7 @@ print(lkhd)
 if False:
     evaluator.overview(
         output_path=Path('results/custom_tree'),
-        image_path=Path('small_images'),
+        image_path=Path('images'),
         skus=skus.wms_sku_id.values,
         cluster_idx=labels,
         features=numerical,

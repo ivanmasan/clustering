@@ -1,11 +1,6 @@
 import numpy as np
-import numpy as np
 import pandas as pd
 import torch
-from tqdm import tqdm
-
-from eval import get_evaluator
-
 
 skus = pd.read_csv('skus.csv')
 skus['dimensions_mm'] = skus['dimensions_mm'].apply(lambda x: [int(xx) for xx in x.strip('][').split(', ')])

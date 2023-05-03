@@ -4,8 +4,7 @@ import torch
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
-from db import get_query_fetcher
-from eval import get_evaluator
+from evaluator.eval import get_evaluator
 from sklearn.feature_extraction.text import CountVectorizer
 from stop_words import get_stop_words
 from unidecode import unidecode

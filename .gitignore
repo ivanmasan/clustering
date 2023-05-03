@@ -5,3 +5,10 @@ small_images
 cc.*
 clusters
 embedding_clusters
+*.csv
+query_data
+__pycache__
+temp
+text_clusters
+original_images
+old_data

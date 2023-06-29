@@ -152,10 +152,6 @@ for batch in yield_repeat_batches(SAMPLES, episodes=5000):
         print(neg_log_lkhd)
 
 
-
-
-
-raise
 evaluator.overview(
     output_path=Path('results/custom_cluster'),
     image_path=Path('images'),

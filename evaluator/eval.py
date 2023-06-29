@@ -7,6 +7,7 @@ from typing import Optional, Dict
 from collections import defaultdict
 from beartype.typing import Any, Union, List, Literal
 
+from scipy.stats import binom
 import pandas as pd
 import numpy as np
 from scipy.special import gammaln
@@ -19,115 +20,64 @@ class Evaluator:
     def __init__(
         self,
         skus: Union[List, np.ndarray],
-        success: Union[List, np.ndarray],
-        total: Union[List, np.ndarray],
-        groups: Optional[Union[List, np.ndarray]] = None,
+        targets: np.ndarray,
         sku_meta_data: pd.DataFrame = None,
     ) -> None:
-        if groups is None:
-            self._groups = np.zeros(len(skus))
-        else:
-            groups = _to_numpy_array(groups, to_2d=True)
-            self._groups = self._generate_group_idx(groups)
-
         self._skus = _to_numpy_array(skus)
-        self._success = _to_numpy_array(success, to_2d=True)
-        self._total = _to_numpy_array(total, to_2d=True)
+        self._targets = targets
+
+        assert targets.shape[0] == len(self._skus)
+        assert targets.shape[3] == 2
+
+        self._sku_to_idx = {}
+        for idx, sku in enumerate(self._skus):
+            self._sku_to_idx[sku] = idx
 
         self._sku_id_to_name = {}
         if sku_meta_data is not None:
             for _, row in sku_meta_data.iterrows():
                 self._sku_id_to_name[row['wms_sku_id']] = row['name']
 
-        self._precompute_combination_numbers()
-
-    def _generate_group_idx(self, groups: np.ndarray):
-        group_sort_idx = np.lexsort(groups.T)
-        ordered_groups = groups[group_sort_idx]
-        group_start_idx = np.where(
-            np.any(ordered_groups[1:] != ordered_groups[:-1], axis=1)
-        )[0]
-
-        assigned_group = np.searchsorted(group_start_idx, np.arange(len(groups)))
-
-        reverse_group_sort_idx = np.argsort(group_sort_idx)
-        return assigned_group[reverse_group_sort_idx]
-
-    def _precompute_combination_numbers(self):
-        self._log_comb_lkhd = (
-            gammaln(self._total + 1)
-            - gammaln(self._success + 1)
-            - gammaln(self._total - self._success + 1)
-        )
-
     @beartype
     def evaluate(
         self,
         skus: Union[List, np.ndarray],
         cluster_idx: Union[List, np.ndarray],
-        metric: Literal["log_lkhd", "loo_log_lkhd", "aic", "bic"] = 'log_lkhd',
-    ) -> float:
+        per_metric: bool = False
+    ) -> Union[np.ndarray, float]:
         skus = _to_numpy_array(skus)
         cluster_idx = _to_numpy_array(cluster_idx)
 
-        group_idxs = self._cluster_idx(skus, cluster_idx)
+        cluster_dict = self._cluster_dict(skus, cluster_idx)
 
-        use_loo_lkhd = metric == "loo_log_lkhd"
+        log_lkhd = np.zeros(self._targets.shape[2])
+        for _, cluster_items_idx in cluster_dict.items():
+            cluster_skus = self._targets[cluster_items_idx]
 
-        total_log_lkhd = 0
-        for cluster_idx in group_idxs:
-            if np.isnan(self._compute_log_lkhd(cluster_idx, loo=use_loo_lkhd)):
-                break
-            total_log_lkhd += self._compute_log_lkhd(cluster_idx, loo=use_loo_lkhd)
+            cluster_target = cluster_skus.sum(0)
+            p = cluster_target[:, :, 0] / cluster_target[:, :, 1]
+            p[np.isnan(p)] = 0
 
-        k = len(group_idxs) * self._success.shape[1]
-        n = self._total.sum()
+            dist = binom(n=cluster_skus[:, :, :, 1], p=p[None, :, :])
+            log_lkhd += dist.logpmf(cluster_skus[:, :, :, 0]).sum((0, 1))
 
-        if metric == "aic":
-            return 2 * k - 2 * total_log_lkhd
-        elif metric == "bic":
-            return np.log(n) * k - 2 * total_log_lkhd
+        if per_metric:
+            return log_lkhd
         else:
-            return total_log_lkhd
+            return log_lkhd.sum()
 
-    def _cluster_idx(self, skus: np.ndarray, cluster_idx: np.ndarray) -> List[np.ndarray]:
-        cluster_dict = {}
+    def _cluster_dict(self, skus: np.ndarray, cluster_idx: np.ndarray) -> dict:
+        cluster_dict = defaultdict(list)
 
         for sku, cluster_id in zip(skus, cluster_idx):
-            cluster_dict[sku] = cluster_id
-
-        cluster_idx_mapping = defaultdict(list)
-
-        for i, (sku, group) in enumerate(zip(self._skus, self._groups)):
             try:
-                cluster_id = cluster_dict[sku]
+                sku_id = self._sku_to_idx[sku]
             except KeyError:
-                raise ValueError(f"Sku {sku} is missing from cluster specification")
+                pass
+            else:
+                cluster_dict[cluster_id].append(sku_id)
 
-            cluster_idx_mapping[(cluster_id, group)].append(i)
-
-        return [np.array(x) for x in cluster_idx_mapping.values()]
-
-    def _compute_log_lkhd(self, cluster_idx: np.ndarray, loo: bool) -> float:
-        total = self._total[cluster_idx]
-        success = self._success[cluster_idx]
-        log_comb_lkhd = self._log_comb_lkhd[cluster_idx]
-
-        sum_s = success.sum(0)
-        sum_n = total.sum(0)
-
-        if loo:
-            p = (sum_s - success) / (sum_n - total)
-        else:
-            p = sum_s / sum_n
-
-        p[np.isnan(p)] = 0
-
-        return (
-            log_comb_lkhd
-            + np.log(np.clip(p, 1e-10, 1)) * success
-            + np.log(np.clip(1 - p, 1e-10, 1)) * (total - success)
-        ).sum()
+        return cluster_dict
 
     def names(
         self,
@@ -188,7 +138,7 @@ class Evaluator:
         cluster_idx: np.ndarray,
         features: np.ndarray,
         feature_names: Union[List, np.ndarray]
-    ) -> None:
+    ) -> float:
         prepare_folder(output_path)
 
         create_cluster_summary_images(
@@ -224,11 +174,13 @@ class Evaluator:
         with open(output_path / 'log_lkhd.txt', 'w') as f:
             f.write(str(lkhd))
 
+        return lkhd
+
 
 def prepare_folder(path: Path) -> None:
     if path.exists():
         shutil.rmtree(path)
-    path.mkdir(exist_ok=True)
+    path.mkdir(exist_ok=True, parents=True)
 
 
 def _create_skus_by_cluster(
@@ -361,16 +313,3 @@ def _to_numpy_array(
         x = x.reshape(-1, 1)
 
     return x
-
-
-def get_evaluator():
-    eval_data = pd.read_csv('old_data/eval_data.csv')
-    eval_data = eval_data.fillna(0)
-
-    return Evaluator(
-        groups=eval_data[['week', 'picker_host']].values,
-        skus=eval_data['wms_sku_id'].values,
-        success=eval_data[['task_success', 'pick_success', 'place_success']].values,
-        total=eval_data[['task_total', 'pick_total', 'place_total']].values,
-        sku_meta_data=pd.read_csv('old_data/skus.csv')
-    )

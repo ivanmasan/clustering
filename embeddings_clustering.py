@@ -24,10 +24,24 @@ pca = PCA(200)
 norm_emb = pca.fit_transform(norm_emb)
 
 tsne = TSNE()
-norm_emb = tsne.fit_transform(norm_emb)
+tsne_emb = tsne.fit_transform(norm_emb)
+
+np.savez(
+    'text_clusters/cluster_tsne_2.npz',
+    emb=tsne_emb, skus=skus.wms_sku_id.values
+)
+
+tsne_3 = TSNE(3)
+tsne_emb_3 = tsne_3.fit_transform(norm_emb)
+
+np.savez(
+    'text_clusters/cluster_tsne_3.npz',
+    emb=tsne_emb_3, skus=skus.wms_sku_id.values
+)
+
 
 clustering = KMeans(7)
-cluster_vals = clustering.fit_transform(norm_emb)
+cluster_vals = clustering.fit_transform(tsne_emb)
 
 plt.scatter(*norm_emb.T, c=clustering.labels_)
 

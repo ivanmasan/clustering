@@ -281,7 +281,6 @@ viz = DailyVisualizer(
 )
 
 
-
 viz.plot_failure_rates(start_date=dt.date(2023, 4, 9))
 viz.plot_cluster_normalized_failure_rates(start_date=dt.date(2023, 4, 9))
 viz.plot_cluster_contribution(start_date=dt.date(2023, 4, 9), metric='Total')
@@ -292,4 +291,6 @@ viz.plot_cluster_contribution(start_date=dt.date(2023, 4, 9), metric='Place Fail
                               cluster_ids=[101, 39, 45, 46])
 
 viz.plot_cluster_contribution(start_date=dt.date(2023, 4, 9), metric='Total', cluster_ids=[101, 39, 45, 46])
+viz.plot_picker_contribution(start_date=dt.date(2023, 4, 9), metric='Total')
+
 viz.plot_cluster_contribution(start_date=dt.date(2023, 4, 9), metric='Total', cluster_ids=[101, 39, 45, 46], hosts=['ropi03'])

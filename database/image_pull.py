@@ -22,10 +22,10 @@ for _, (sku, image_url) in skus[['wms_sku_id', 'image_url']].iterrows():
     with open(f'original_images/{sku}.png', 'wb') as f:
         img.save(f)
 
-    scale_factor = 400 / max(img.size)
+    scale_factor = 250 / max(img.size)
     img = img.resize(size=(int(img.size[0] * scale_factor),
                            int(img.size[1] * scale_factor)))
     img = img.convert('RGB')
 
     with open(f'images/{sku}.jpg', 'wb') as f:
-        img.save(f, "JPEG")
+        img.save(f, "JPEG", quality=70)

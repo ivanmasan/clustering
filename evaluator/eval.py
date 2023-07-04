@@ -55,7 +55,8 @@ class Evaluator:
             cluster_skus = self._targets[cluster_items_idx]
 
             cluster_target = cluster_skus.sum(0)
-            p = cluster_target[:, :, 0] / cluster_target[:, :, 1]
+            with np.errstate(divide='ignore', invalid='ignore'):
+                p = cluster_target[:, :, 0] / cluster_target[:, :, 1]
             p[np.isnan(p)] = 0
 
             dist = binom(n=cluster_skus[:, :, :, 1], p=p[None, :, :])

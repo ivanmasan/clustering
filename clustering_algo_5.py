@@ -404,8 +404,8 @@ lkhd = evaluator.overview(
 
 
 imp.to_excel(output_path / 'importances.ods')
-similarity = clustering.similarities()
-np.savez(output_path / 'similarities.npz', similarity)
+similarity = clustering.similarities().detach().numpy()
+np.savez(output_path / 'similarities.npz', sim=similarity)
 
 most_similiar_clusters = pd.DataFrame({'sku': data['skus'].astype(int)})
 most_similiar_clusters[['b5', 'b4', 'b3', 'b2', 'b1']] = np.argsort(similarity, axis=1)[:, -5::]

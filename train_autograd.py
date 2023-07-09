@@ -158,11 +158,11 @@ def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
 @click.option('--distance_decay', default=40)
 @click.option('--central_cluster_reg', default=100)
 @click.option('--clusters', default=48)
-@click.option('--iqr_clipping', default=0)
+@click.option('--iqr_clipping', default=-1)
 @click.option('--l2_reg', default=100)
 @click.option('--include_text_features', is_flag=True, default=False)
 @click.option('--logarithm_transform', is_flag=True, default=False)
-@click.option('--tsne', default=0, type=int)
+@click.option('--tsne', default=-1, type=int)
 @click.option('--flat_scale', is_flag=True, default=False)
 def main(
     entropy_reg_ratio,

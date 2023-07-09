@@ -31,7 +31,7 @@ def _create_features(dataset_folder, include_text_features, tsne):
             dataset_name='sku_text_features',
             alias='sku_text_features',
             overridable=True).get_local_copy()
-        text_cluster_path = Path(text_cluster_path) / 'clusters.npz'
+        text_cluster_path = Path(text_cluster_path) / 'cluster.npz'
 
         text_emb = np.load(text_cluster_path.as_posix())
         X = np.hstack([X, text_emb['emb']])

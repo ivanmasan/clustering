@@ -1,5 +1,7 @@
 import matplotlib
 from matplotlib import pyplot as plt
+from sklearn.manifold import TSNE
+
 matplotlib.use("Agg")
 
 from pathlib import Path
@@ -17,19 +19,31 @@ from autograd import AutogradClustering
 import click
 
 
-def _create_features(dataset_folder, include_text_features):
+def _create_features(dataset_folder, include_text_features, tsne):
     feats = np.load(dataset_folder / 'X.npz', allow_pickle=True)
 
     X = feats['data'][:, 3:]
     feature_names = list(feats['feature_names'][3:])
 
     if include_text_features:
-        text_emb = np.load(f'text_clusters/cluster_tsne_2.npz')
+        text_cluster_path = Dataset.get(
+            dataset_project='clustering',
+            dataset_name='sku_text_features',
+            alias='sku_text_features',
+            overridable=True).get_local_copy()
+        text_cluster_path = Path(text_cluster_path) / 'clusters.npz'
+
+        text_emb = np.load(text_cluster_path.as_posix())
         X = np.hstack([X, text_emb['emb']])
         feature_names.extend([f'text_cluster_{k}' for k in range(text_emb['emb'].shape[1])])
 
     X = np.hstack([X, np.product(X[:, 1:3], axis=1, keepdims=True)])
     feature_names.append('exposed_surface')
+
+    if tsne > 0:
+        tsne_transformer = TSNE(tsne)
+        X = tsne_transformer.fit_transform(X)
+        feature_names = [f'tsne_{i}' for i in range(tsne)]
 
     return X, feature_names
 
@@ -53,7 +67,7 @@ def _get_sku_list(dataset_folder):
 def _create_transformer(iqr_clipping, logarithm_transform):
     pipeline = [('scaler', StandardScaler())]
 
-    if iqr_clipping is not None:
+    if iqr_clipping > 0:
         iqr_clipper = IQRClipper(iqr_clipping)
         pipeline = [('iqr_clipper', iqr_clipper)] + pipeline
 
@@ -144,11 +158,12 @@ def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
 @click.option('--distance_decay', default=40)
 @click.option('--central_cluster_reg', default=100)
 @click.option('--clusters', default=48)
-@click.option('--iqr_clipping', default=None)
-@click.option('--l2_reg', default=0)
-@click.option('--include_text_features', is_flag=True)
-@click.option('--logarithm_transform', is_flag=True)
-@click.option('--dataset_version')
+@click.option('--iqr_clipping', default=0)
+@click.option('--l2_reg', default=100)
+@click.option('--include_text_features', is_flag=True, default=False)
+@click.option('--logarithm_transform', is_flag=True, default=False)
+@click.option('--tsne', default=0, type=int)
+@click.option('--flat_scale', is_flag=True, default=False)
 def main(
     entropy_reg_ratio,
     cluster_entropy_reg,
@@ -161,19 +176,19 @@ def main(
     include_text_features,
     iqr_clipping,
     logarithm_transform,
-    dataset_version
+    tsne,
+    flat_scale
 ):
-    task = Task.init()
+    task = Task.init(project_name="clustering", task_name="Run")
     logger = task.get_logger()
 
     dataset = Dataset.get(dataset_project='clustering',
                           dataset_name='failures',
-                          dataset_version=dataset_version,
                           alias='failure_data',
                           overridable=True)
     dataset_folder = Path(dataset.get_local_copy())
 
-    X, feature_names = _create_features(dataset_folder, include_text_features)
+    X, feature_names = _create_features(dataset_folder, include_text_features, tsne)
     train_y, valid_y = _create_targets(dataset_folder)
     skus = _get_sku_list(dataset_folder)
 
@@ -199,11 +214,12 @@ def main(
         X=X,
         y=train_y,
         evaluator=evaluator,
-        sku_list=skus
+        sku_list=skus,
+        flat_scale=flat_scale
     )
 
-    for i in range(5):
-        clustering.train(128, 100)
+    for i in range(6):
+        clustering.train(128, 1000)
 
         _eval(
             clustering=clustering,
@@ -212,7 +228,7 @@ def main(
             skus=skus,
             features=X,
             feature_names=feature_names,
-            episode=i * 100
+            episode=i * 1000
         )
 
     task.close()

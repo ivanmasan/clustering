@@ -89,7 +89,8 @@ class AutogradClustering:
             transformer,
             X, y,
             evaluator=None,
-            sku_list=None
+            sku_list=None,
+            flat_scale=False
     ) -> None:
         self._distance_decay = distance_decay
         self._within_cluster_std = within_cluster_std
@@ -127,7 +128,13 @@ class AutogradClustering:
             (self._cluster_count, self._metric_segments, self._metric_time_segments, self._metrics),
             -3.4, requires_grad=True
         )
-        self._scale = torch.zeros((self._cluster_count, self._features), requires_grad=True)
+
+        self._flat_scale = flat_scale
+        if flat_scale:
+            self._scale = torch.zeros((self._cluster_count, 1), requires_grad=True)
+        else:
+            self._scale = torch.zeros((self._cluster_count, self._features), requires_grad=True)
+
         self._optimizer = torch.optim.SGD([self._clusters, self._p, self._scale], lr=0.01)
 
     def train(self, batch_size, episodes):
@@ -191,7 +198,8 @@ class AutogradClustering:
                         - central_clusters_lkhd
                         + self._entropy_reg_ratio * self._cluster_entropy_reg * dist_entropy
                         - (1 - self._entropy_reg_ratio) * self._cluster_entropy_reg * cluster_entropy
-                        + self._l2_reg * (softplus(self._scale) ** 2).mean())
+                        + (self._l2_reg * (softplus(self._scale) ** 2).mean())
+                        * (1 + self._flat_scale * (self._features - 1)))
 
         if neg_log_lkhd.isnan():
             raise RuntimeError()
@@ -255,7 +263,7 @@ class AutogradClustering:
     def sparsity(self):
         return (softplus(self._scale[self.relevant_clusters()]) < 0.01).float().mean().item()
 
-    def feature_importances(self, min_size=None):
+    def feature_importances(self, min_size=None, min_importance=4):
         with torch.no_grad():
             clusters = self.clusters(min_size)
             relevant_clusters = np.unique(clusters)
@@ -264,12 +272,12 @@ class AutogradClustering:
             data = []
 
             for cluster in relevant_clusters:
-                importances = self._scale[cluster]
+                if self._flat_scale:
+                    importances = torch.full(size=(self._features,), fill_value=self._scale[cluster, 0].item())
+                else:
+                    importances = self._scale[cluster]
 
-                for idx in torch.flip(torch.argsort(importances), (0,)):
-                    if importances[idx] < 4:
-                        continue
-
+                for idx in range(self._features):
                     data.append({
                         'cluster_id': cluster,
                         'importance': importances[idx].item(),
@@ -278,6 +286,10 @@ class AutogradClustering:
                         'z_value': self._clusters[cluster, idx].item(),
                         'percentile': (self._X[:, idx] < self._clusters[cluster, idx]).float().mean().item()
                     })
+        data = pd.DataFrame(data)
+        data = data.sort_values(['cluster_id', 'importance'])
+        if not self._flat_scale:
+            data = data[data['importance'] > min_importance]
         return pd.DataFrame(data)
 
     def _point_similarity(self, X):

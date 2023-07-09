@@ -4,11 +4,12 @@ from pathlib import Path
 import pandas as pd
 import requests
 from PIL import Image
+from tqdm import tqdm
 
 skus = pd.read_csv('query_data/skus.csv')
 pulled_images = [x.stem for x in Path('images').iterdir()]
 
-for _, (sku, image_url) in skus[['wms_sku_id', 'image_url']].iterrows():
+for _, (sku, image_url) in tqdm(skus[['wms_sku_id', 'image_url']].iterrows()):
     if sku in pulled_images:
         continue
     response = requests.get(image_url)
@@ -22,7 +23,7 @@ for _, (sku, image_url) in skus[['wms_sku_id', 'image_url']].iterrows():
     with open(f'original_images/{sku}.png', 'wb') as f:
         img.save(f)
 
-    scale_factor = 250 / max(img.size)
+    scale_factor = 150 / max(img.size)
     img = img.resize(size=(int(img.size[0] * scale_factor),
                            int(img.size[1] * scale_factor)))
     img = img.convert('RGB')

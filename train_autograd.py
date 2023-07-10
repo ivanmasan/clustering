@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, FunctionTransformer
 
 from evaluator.eval import Evaluator
 
@@ -19,7 +19,7 @@ from autograd import AutogradClustering
 import click
 
 
-def _create_features(dataset_folder, include_text_features, tsne):
+def _create_features(dataset_folder, include_text_features):
     feats = np.load(dataset_folder / 'X.npz', allow_pickle=True)
 
     X = feats['data'][:, 3:]
@@ -39,11 +39,6 @@ def _create_features(dataset_folder, include_text_features, tsne):
 
     X = np.hstack([X, np.product(X[:, 1:3], axis=1, keepdims=True)])
     feature_names.append('exposed_surface')
-
-    if tsne > 0:
-        tsne_transformer = TSNE(tsne)
-        X = tsne_transformer.fit_transform(X)
-        feature_names = [f'tsne_{i}' for i in range(tsne)]
 
     return X, feature_names
 
@@ -76,6 +71,13 @@ def _create_transformer(iqr_clipping, logarithm_transform):
         pipeline = [('log_scaler', log_scaler)] + pipeline
 
     return Pipeline(pipeline)
+
+
+def _apply_tsne(tsne, X):
+    tsne_transformer = TSNE(tsne)
+    X = tsne_transformer.fit_transform(X)
+    feature_names = [f'tsne_{i}' for i in range(tsne)]
+    return X, feature_names
 
 
 def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
@@ -188,11 +190,14 @@ def main(
                           overridable=True)
     dataset_folder = Path(dataset.get_local_copy())
 
-    X, feature_names = _create_features(dataset_folder, include_text_features, tsne)
+    pipeline = _create_transformer(iqr_clipping, logarithm_transform)
+    X, feature_names = _create_features(dataset_folder, include_text_features)
+    if tsne > 0:
+        X, feature_names = _apply_tsne(tsne, X)
+        pipeline = FunctionTransformer()
+
     train_y, valid_y = _create_targets(dataset_folder)
     skus = _get_sku_list(dataset_folder)
-
-    pipeline = _create_transformer(iqr_clipping, logarithm_transform)
 
     evaluator = Evaluator(
         targets=valid_y,

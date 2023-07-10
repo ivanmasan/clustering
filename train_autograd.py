@@ -115,9 +115,11 @@ def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
     np.savez(similarity_path, sim=similarity)
     task.upload_artifact(f'Similarities {episode}', artifact_object=similarity_path)
 
+    norm_similarity = similarity / similarity.sum(1, keepdims=True)
     most_similiar_clusters = pd.DataFrame({'sku': skus})
-    most_similiar_clusters[['b5', 'b4', 'b3', 'b2', 'b1']] = np.argsort(similarity, axis=1)[:, -5::]
-    most_similiar_clusters[['s5', 's4', 's3', 's2', 's1']] = np.sort(similarity, axis=1)[:, -5::]
+    most_similiar_clusters[['b5', 'b4', 'b3', 'b2', 'b1']] = np.argsort(norm_similarity, axis=1)[:, -5::]
+    most_similiar_clusters[['s5', 's4', 's3', 's2', 's1']] = np.sort(norm_similarity, axis=1)[:, -5::]
+    most_similiar_clusters['highest_sim'] = similarity.max(1)
     logger.report_table("Similar clusters", "", table_plot=most_similiar_clusters, iteration=episode)
 
     for cluster_folder in output_path.iterdir():
@@ -195,7 +197,7 @@ def main(
     if tsne > 0:
         X = pipeline.fit_transform(X)
         X, feature_names = _apply_tsne(tsne, X)
-        pipeline = FunctionTransformer()
+        pipeline = StandardScaler()
 
     train_y, valid_y = _create_targets(dataset_folder)
     skus = _get_sku_list(dataset_folder)

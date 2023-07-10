@@ -161,7 +161,7 @@ def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
 @click.option('--central_cluster_reg', default=100)
 @click.option('--clusters', default=48)
 @click.option('--iqr_clipping', default=-1)
-@click.option('--l2_reg', default=100)
+@click.option('--l2_reg', default=0.2)
 @click.option('--include_text_features', is_flag=True, default=False)
 @click.option('--logarithm_transform', is_flag=True, default=False)
 @click.option('--tsne', default=-1, type=int)
@@ -193,6 +193,7 @@ def main(
     pipeline = _create_transformer(iqr_clipping, logarithm_transform)
     X, feature_names = _create_features(dataset_folder, include_text_features)
     if tsne > 0:
+        X = pipeline.fit_transform(X)
         X, feature_names = _apply_tsne(tsne, X)
         pipeline = FunctionTransformer()
 

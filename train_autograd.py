@@ -188,8 +188,7 @@ def main(
 
     dataset = Dataset.get(dataset_project='clustering',
                           dataset_name='failures',
-                          alias='failure_data',
-                          overridable=True)
+                          alias='failure_data')
     dataset_folder = Path(dataset.get_local_copy())
 
     pipeline = _create_transformer(iqr_clipping, logarithm_transform)

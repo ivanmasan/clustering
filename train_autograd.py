@@ -168,6 +168,7 @@ def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
 @click.option('--logarithm_transform', is_flag=True, default=False)
 @click.option('--tsne', default=-1, type=int)
 @click.option('--flat_scale', is_flag=True, default=False)
+@click.option('--epochs', default=6)
 def main(
     entropy_reg_ratio,
     cluster_entropy_reg,
@@ -181,10 +182,13 @@ def main(
     iqr_clipping,
     logarithm_transform,
     tsne,
-    flat_scale
+    flat_scale,
+    epochs
 ):
     task = Task.init(project_name="clustering", task_name="Run")
     logger = task.get_logger()
+
+    print(task.get_parameter('Datasets/failure_data'))
 
     dataset = Dataset.get(dataset_project='clustering',
                           dataset_name='failures',
@@ -225,7 +229,7 @@ def main(
         flat_scale=flat_scale
     )
 
-    for i in range(6):
+    for i in range(epochs):
         clustering.train(128, 1000)
 
         _eval(

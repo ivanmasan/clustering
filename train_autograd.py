@@ -141,7 +141,7 @@ def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
                 )
         elif cluster_folder.suffix == '.jpeg':
             logger.report_image(
-                "Summary Images",
+                "0 - Summary Images",
                 cluster_folder.stem,
                 iteration=episode,
                 local_path=cluster_folder.as_posix()
@@ -193,8 +193,6 @@ def main(
 ):
     task = Task.init(project_name="clustering", task_name="Run")
     logger = task.get_logger()
-
-    print(task.get_parameter('Datasets/failure_data'))
 
     dataset = Dataset.get(dataset_project='clustering',
                           dataset_name='failures',

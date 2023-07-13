@@ -110,6 +110,12 @@ def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
         table_plot=importances
     )
 
+    logger.report_table(
+        "Skus", "",
+        iteration=episode,
+        csv=(output_path / "sku_summary.csv").as_posix()
+    )
+
     similarity = clustering.similarities().detach().numpy()
     similarity_path = output_path / 'similarities.npz'
     np.savez(similarity_path, sim=similarity)

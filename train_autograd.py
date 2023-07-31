@@ -245,7 +245,7 @@ def main(
     )
 
     for i in range(epochs):
-        clustering.train(128, 10)
+        clustering.train(128, 1000)
 
         _eval(
             clustering=clustering,

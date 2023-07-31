@@ -8,12 +8,10 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import normalize
 
-from evaluator.eval import get_evaluator, create_cluster_summary_images
+from evaluator.eval import create_cluster_summary_images
 
 
-evaluator = get_evaluator()
-
-skus = pd.read_csv('query_data/skus.csv')
+skus = pd.read_csv('query_data_2/skus.csv')
 sku_id = skus.wms_sku_id.values
 
 embedded_names = np.load('text_clusters/embedded_names.npz')['arr_0']

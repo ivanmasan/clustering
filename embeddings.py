@@ -7,7 +7,7 @@ from evaluator.eval import Evaluator
 fasttext.util.download_model('cs', if_exists='ignore')
 ft = fasttext.load_model('cc.cs.300.bin')
 
-skus = pd.read_csv('query_data/skus.csv')
+skus = pd.read_csv('query_data_2/skus.csv')
 names = skus.name.apply(lambda x: x.lower()).values
 
 embedded_names = []
@@ -18,10 +18,3 @@ for name in names:
 embedded_names = np.stack(embedded_names)
 
 np.savez('text_clusters/embedded_names.npz', embedded_names)
-
-evaluator = Evaluator(
-    targets=np.array([]),
-    skus=np.array(skus),
-    sku_meta_data=pd.read_csv('query_data/skus.csv')
-)
-

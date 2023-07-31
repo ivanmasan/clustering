@@ -5,13 +5,13 @@ from database.db import get_query_fetcher
 query_fetcher = get_query_fetcher()
 
 start_date = "2023-01-02"
-end_date = "2023-05-08"
+end_date = "2023-07-31"
 
 failure_data = query_fetcher.fetch(
     'FAILURE_DATA_DAILY', start_date=start_date, end_date=end_date)
 
 sku_data = query_fetcher.fetch('SKUS')
-sku_data.to_csv('query_data/raw_skus.csv')
+sku_data.to_csv('query_data_2/raw_skus.csv')
 sku_data = sku_data.sort_values('wms_sku_id')
 
 failure_data = failure_data[np.isin(failure_data.sku_id.values, sku_data.wms_sku_id.values)]
@@ -41,6 +41,6 @@ data[sku_idx, host_idx, week_idx, 3, 1] = failure_data.tasks
 data[sku_idx, host_idx, week_idx, 4, 0] = failure_data.fails
 data[sku_idx, host_idx, week_idx, 4, 1] = failure_data.tasks
 
-np.savez('query_data/daily_failure_data.npz',
+np.savez('query_data_2/daily_failure_data.npz',
          data=data, skus=skus, hosts=hosts, days=days)
 

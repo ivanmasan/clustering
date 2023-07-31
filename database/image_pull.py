@@ -6,11 +6,11 @@ import requests
 from PIL import Image
 from tqdm import tqdm
 
-skus = pd.read_csv('query_data/skus.csv')
+skus = pd.read_csv('query_data_2/skus.csv')
 pulled_images = [x.stem for x in Path('images').iterdir()]
 
 for _, (sku, image_url) in tqdm(skus[['wms_sku_id', 'image_url']].iterrows()):
-    if sku in pulled_images:
+    if str(sku) in pulled_images:
         continue
     response = requests.get(image_url)
     img = Image.open(BytesIO(response.content))

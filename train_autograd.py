@@ -1,3 +1,5 @@
+from collections import Counter
+
 import matplotlib
 from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
@@ -43,11 +45,11 @@ def _create_features(dataset_folder, include_text_features):
     return X, feature_names
 
 
-def _create_targets(dataset_folder):
+def _create_targets(dataset_folder, eval_weeks):
     y = np.load(dataset_folder / 'weekly_failure_data.npz', allow_pickle=True)['data']
 
-    train_y = y[:, :, :-2]
-    valid_y = y[:, :, -2:]
+    train_y = y[:, :, :-eval_weeks]
+    valid_y = y[:, :, -eval_weeks:]
 
     valid_y = valid_y.sum(2)
 
@@ -116,6 +118,13 @@ def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
         csv=(output_path / "sku_summary.csv").as_posix()
     )
 
+    cluster_counter = Counter(clusters)
+    logger.report_histogram(
+        "Cluster Size", "",
+        iteration=episode,
+        values=list(cluster_counter.values())
+    )
+
     similarity = clustering.similarities().detach().numpy()
     similarity_path = output_path / 'similarities.npz'
     np.savez(similarity_path, sim=similarity)
@@ -175,6 +184,7 @@ def _eval(clustering, evaluator, task, skus, features, feature_names, episode):
 @click.option('--tsne', default=-1, type=int)
 @click.option('--flat_scale', is_flag=True, default=False)
 @click.option('--epochs', default=6)
+@click.option('--eval_weeks', default=3)
 def main(
     entropy_reg_ratio,
     cluster_entropy_reg,
@@ -189,7 +199,8 @@ def main(
     logarithm_transform,
     tsne,
     flat_scale,
-    epochs
+    epochs,
+    eval_weeks
 ):
     task = Task.init(project_name="clustering", task_name="Run")
     logger = task.get_logger()
@@ -206,7 +217,7 @@ def main(
         X, feature_names = _apply_tsne(tsne, X)
         pipeline = StandardScaler()
 
-    train_y, valid_y = _create_targets(dataset_folder)
+    train_y, valid_y = _create_targets(dataset_folder, eval_weeks)
     skus = _get_sku_list(dataset_folder)
 
     evaluator = Evaluator(
@@ -234,7 +245,7 @@ def main(
     )
 
     for i in range(epochs):
-        clustering.train(128, 1000)
+        clustering.train(128, 10)
 
         _eval(
             clustering=clustering,

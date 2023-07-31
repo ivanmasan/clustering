@@ -5,7 +5,7 @@ from database.db import get_query_fetcher
 query_fetcher = get_query_fetcher()
 
 start_date = "2023-01-02"
-end_date = "2023-04-27"
+end_date = "2023-07-31"
 
 first_pick_data = query_fetcher.fetch(
     'DATA_WEEKLY', start_date=start_date, end_date=end_date)
@@ -13,7 +13,7 @@ failure_data = query_fetcher.fetch(
     'FAILURE_DATA_WEEKLY', start_date=start_date, end_date=end_date)
 
 sku_data = query_fetcher.fetch('SKUS')
-sku_data.to_csv('query_data/raw_skus.csv')
+sku_data.to_csv('query_data_2/raw_skus.csv')
 sku_data = sku_data.sort_values('wms_sku_id')
 
 first_pick_data = first_pick_data[np.isin(first_pick_data.sku_id.values, sku_data.wms_sku_id.values)]
@@ -62,12 +62,12 @@ data[sku_idx, host_idx, week_idx, 5, 1] = failure_data.tasks
 data[sku_idx, host_idx, week_idx, 6, 0] = failure_data.fails
 data[sku_idx, host_idx, week_idx, 6, 1] = failure_data.tasks
 
-np.savez('query_data/data.npz', data=data, skus=skus, hosts=hosts, weeks=weeks)
+np.savez('query_data_2/data.npz', data=data, skus=skus, hosts=hosts, weeks=weeks)
 
 
 sku_idx = np.searchsorted(sku_data.wms_sku_id, skus)
 sku_data = sku_data.iloc[sku_idx]
-sku_data.to_csv('query_data/skus.csv')
+sku_data.to_csv('query_data_2/skus.csv')
 
 dimensions = np.stack(sku_data['dimensions_mm'].values)
 
@@ -82,4 +82,4 @@ feature_names = ['X_dim', 'Y_dim', 'Z_dim',
                  'min_dim', 'mid_dim', 'max_dim',
                  'area', 'dim_ratio', 'weight']
 
-np.savez('query_data/X.npz', data=X, skus=skus, feature_names=feature_names)
+np.savez('query_data_2/X.npz', data=X, skus=skus, feature_names=feature_names)

@@ -10,8 +10,8 @@ FAILURE_DATA:
       sum(case when move_to_scan_position_actions>pick_actions and task_success=false and pick_actions>0 then 1 else 0 end) as detfails
   from pick_cycle_agg 
   where
-      task_start > '${start_date}'
-      and task_start < '${end_date}'
+      task_end > '${start_date}'
+      and task_end < '${end_date}'
   group by 
       sku_id,
       picker_host
@@ -21,7 +21,7 @@ FAILURE_DATA_WEEKLY:
   select 
       sku_id,
       picker_host,
-      floor(date_part('day', task_start - '2023-01-02') / 7)::int as week,
+      floor(date_part('day', task_end - '2023-01-02') / 7)::int as week,
       count(*) as tasks, 
       sum(case when task_success=false then 1 else 0 end) as fails, 
       sum(case when pick_actions=0 then 1 else 0 end) as NoPickAttempts, 
@@ -30,8 +30,8 @@ FAILURE_DATA_WEEKLY:
       sum(case when move_to_scan_position_actions>pick_actions and task_success=false and pick_actions>0 then 1 else 0 end) as detfails
   from pick_cycle_agg 
   where
-      task_start > '${start_date}'
-      and task_start < '${end_date}'
+      task_end > '${start_date}'
+      and task_end < '${end_date}'
   group by 
       week,
       sku_id,
@@ -42,19 +42,19 @@ FAILURE_DATA_DAILY:
   select 
       sku_id,
       picker_host,
-      date(task_start),
+      date(task_end),
       count(*) as tasks, 
       sum(case when task_success=false then 1 else 0 end) as fails, 
       sum(case when pick_actions=0 then 1 else 0 end) as NoPickAttempts, 
       sum(case when pick_actions-successful_pick_actions=4 then 1 else 0 end) as error3C, 
       sum(case when successful_place_actions<place_actions then 1 else 0 end) as PlaceFails, 
       sum(case when move_to_scan_position_actions>pick_actions and task_success=false and pick_actions>0 then 1 else 0 end) as detfails
-  from pick_cycle_agg 
+  from pick_cycle_agg
   where
-      task_start > '${start_date}'
-      and task_start < '${end_date}'
+      task_end > '${start_date}'
+      and task_end < '${end_date}'
   group by 
-      date(task_start),
+      date(task_end),
       sku_id,
       picker_host
 
@@ -64,7 +64,7 @@ DATA_WEEKLY:
   with first_data as (
   select distinct on (command_id)
       command_id,
-      floor(date_part('day', task_start - '2023-01-02') / 7)::int as week,
+      floor(date_part('day', task_end - '2023-01-02') / 7)::int as week,
       task_success,
       pick_success,
       place_success,
@@ -72,8 +72,8 @@ DATA_WEEKLY:
       picker_host
   from scan_sku_agg
   where 
-      task_start > '${start_date}'
-      and task_start < '${end_date}'
+      task_end > '${start_date}'
+      and task_end < '${end_date}'
   )
   
   select 
@@ -102,8 +102,8 @@ DATA_TOTAL:
       wms_sku_id,
   from scan_sku_agg
   where 
-      task_start > '${start_date}'
-      and task_start < '${end_date}'
+      task_end > '${start_date}'
+      and task_end < '${end_date}'
   )
   
   select 
